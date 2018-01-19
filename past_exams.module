@@ -1,0 +1,193 @@
+<?php
+/*
+ * Implements hook_block_info()
+ */
+function past_exams_block_info() {
+  $blocks = array();
+  $blocks['exams_search'] = array(
+    'info' => t('Search Exams'),
+    'status' => TRUE,
+    'region' => 'highlighted',
+    'visibility' => BLOCK_VISIBILITY_NOTLISTED,
+    'pages' => 'admin\nadmin/*',
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/*
+ * Implements hook_block_view()
+ */
+function past_exams_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'exams_search': // Exam search block
+      if (user_access('access content')) {
+        $block['content'] = drupal_get_form('past_exams_search_exams_form');
+      }
+      break;
+  }
+  return $block;
+}
+
+/*
+ * Hook menu implementation
+ */
+function past_exams_menu() {
+
+  // Exam search autocomplete path
+  $items['exam/search'] = array(
+    'page callback' => 'past_exams_search',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array(
+      'access content',
+    ),
+  );
+  return $items;
+}
+
+/*
+ * Query function to populate autocomplete search form
+ */
+function past_exams_search($string = "") {
+  //Query DB to get course and professor list
+  $matches = array();
+  if ($string) {
+    $result = db_select('node')
+      ->fields('node', array('nid', 'title'))
+      ->condition('title', '%' . db_like($string) . '%', 'LIKE')
+      ->condition(db_or()
+        ->condition('type', 'faculty')
+        ->condition('type', 'course')
+      )
+      ->execute();
+
+    // save the query to matches
+    foreach ($result as $row) {
+      $matches[$row->title . " [$row->nid]"] = check_plain($row->title);
+    }
+  }
+  // Return the result to the form in json
+  drupal_json_output($matches);
+}
+
+/*
+ * Hook form implemenation for exam search form
+ */
+function past_exams_search_exams_form($form, &$form_state) {
+
+  drupal_add_js(drupal_get_path('module','past_exams') . '/autocomplete_autosubmit.js', array('group' => JS_THEME));
+
+  // Professor/Course autocomplete field
+  $form['exam'] = array(
+    '#title' =>t('Search all exams, by professor name or course title:'),
+    '#type' => 'textfield',
+    '#autocomplete_path' => 'exam/search',
+    '#attributes' => array(
+      'class' => array(
+        'auto_submit'
+      ),
+      'placeholder' => t('Search Past Exams')
+    ),
+  );
+
+  // Submit button
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Go',
+  );
+  return $form;
+}
+
+/*
+ * Form submit handler for exam search
+ */
+function past_exams_search_exams_form_submit($form, &$form_state) {
+  $title = $form_state['values']['exam'];
+  $matches = array();
+
+  // This preg_match() looks for the last pattern like [33334] and if found
+  // extracts the numeric portion.
+  $result = preg_match('/\[([0-9]+)\]$/', $title, $matches);
+  if ($result > 0) {
+    // If $result is nonzero, we found a match and can use it as the index into
+    // $matches.
+    $nid = $matches[$result];
+    // Verify that it's a valid nid.
+    $node = node_load($nid);
+    if (!isset($node)) {
+      drupal_set_message(t('<strong>No matches.</strong><br />To search for exams, start typing a professor or course name, then select one of the autocomplete suggestions'));
+      return;
+    }
+    else {
+      if ($node->type == 'faculty' || $node->type == 'course') {
+        // Redirect to RSVP form with guest id argument.
+        $form_state['redirect'] = '/node/' . $nid;
+      }
+      else {
+        drupal_set_message(t('<strong>No matches.</strong><br />To search for exams, start typing a professor or course name, then select one of the autocomplete suggestions'));
+        return;
+      }
+    }
+  }
+  else {
+    drupal_set_message(t('<strong>No matches.</strong><br />To search for exams, start typing a professor or course name, then select one of the autocomplete suggestions'));
+  }
+}
+
+/*
+ * Hook form alter implementation
+ */
+function past_exams_form_alter(&$form, &$form_state, $form_id) {
+    switch ($form_id) {
+        case 'exam_node_form':
+            $form['title']['#access'] = FALSE;
+    }
+}
+
+/*
+ * Hook node presave implementation
+ */
+function past_exams_node_presave($node) {
+  // Automatically set title in Exam node using field values
+  if ($node->type == 'exam') {
+    // Course name
+    $course = node_load($node->field_course['und'][0]['target_id']);
+    $node->title = $course->title;
+    // Faculty
+    $faculty = node_load($node->field_faculty['und'][0]['target_id']);
+    $node->title .= ' - ' . $faculty->title;
+    // Term
+    $term = node_load($node->field_term['und'][0]['target_id']);
+    $node->title .= ' - ' . $term->title;
+    // Year
+    $node->title .= ' ' . date('Y', strtotime($node->field_year['und'][0]['value']));
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function past_exams_views_api() {
+  return array(
+           'api' => '3.0',
+           'path' => drupal_get_path('module', 'past_exams') . '/views'
+  );
+}
+
+/**
+ * Implements hook_views_default_views().
+ *
+ * Imports views from the /views directory.
+ */
+function past_exams_views_default_views() {
+  $path = __DIR__ . '/views/*.view.inc';
+  $views = array();
+  foreach (glob($path) as $views_filename) {
+    $view = FALSE;
+    require_once($views_filename);
+    $views[$view->name] = $view; // $view exists in the included file.
+    unset($view);
+  }
+  return $views;
+}

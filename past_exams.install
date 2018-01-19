@@ -1,0 +1,284 @@
+<?php
+/*
+ * Requirements function
+ */
+function past_exams_requirements($phase) {
+    $requirements = array();
+    if ($phase == 'install') {
+        $private_path = variable_get('file_private_path', FALSE);
+        if (empty($private_path)) {
+            $requirements['past_exams'] = array(
+                'title' => $t('Past Exams: Private files'),
+                'description' => $t('Private file system is not set. The Past Exams module requires a private file system.'),
+                'value' => $t('Set a private file path on the <a href="/admin/config/media/file-system">File System configuration page</a>.'),
+                'severity' => REQUIREMENT_ERROR,
+            );
+        }
+    }
+    return $requirements;
+}
+
+/*
+ *Install function for custom node types, fields, and field instances
+ */
+function past_exams_install() {
+    // Custom node types
+    $types = array(
+        // faculty
+        array(
+            'type' => 'faculty',
+            'name' => st('Faculty'),
+            'base' => 'node_content',
+            'description' => st('Use <em>Faculty</em> for professors/instructors with exams in the database.'),
+            'custom' => 1,
+            'modified' => 1,
+            'locked' => 0,
+            'title_label' => 'Faculty Name',
+        ),
+        // course
+        array(
+            'type' => 'course',
+            'name' => st('Course'),
+            'base' => 'node_content',
+            'description' => st('Use <em>Course</em> for courses with exams in the database.'),
+            'custom' => 1,
+            'modified' => 1,
+            'locked' => 0,
+            'title_label' => 'Course Name',
+        ),
+        // term
+        array(
+            'type' => 'term',
+            'name' => st('Term'),
+            'base' => 'node_content',
+            'description' => st('Use <em>Term</em> for academic terms during which exams in the database were administered.'),
+            'custom' => 1,
+            'modified' => 1,
+            'locked' => 0,
+            'title_label' => 'Term Name',
+        ),
+        // exam
+        array(
+            'type' => 'exam',
+            'name' => st('Exam'),
+            'base' => 'node_content',
+            'description' => st('Use <em>Exam</em> for past exams that have documents in the database.'),
+            'custom' => 1,
+            'modified' => 1,
+            'locked' => 0,
+        ),
+    );
+    // Create the custom node types
+    foreach ($types as $type) {
+        $type = node_type_set_defaults($type);
+        node_type_save($type);
+    }
+    // Custom fields
+    $fields = array(
+        // Course
+        array(
+            'field_name' => 'field_course',
+            'type' => 'entityreference',
+            'module' => 'entityreference',
+            'cardinality' => 1,
+            'settings' => array(
+                'handler_settings' => array(
+                    'target_bundles' => array(
+                        'course' => 'Course',
+                    ),
+                ),
+            ),
+        ),
+        // Faculty
+        array(
+            'field_name' => 'field_faculty',
+            'type' => 'entityreference',
+            'module' => 'entityreference',
+            'cardinality' => -1,
+            'settings' => array(
+                'handler_settings' => array(
+                    'target_bundles' => array(
+                        'faculty' => 'Faculty',
+                    ),
+                ),
+            ),
+        ),
+        // Term
+        array(
+            'field_name' => 'field_term',
+            'type' => 'entityreference',
+            'module' => 'entityreference',
+            'cardinality' => 1,
+            'settings' => array(
+                'handler_settings' => array(
+                    'target_bundles' => array(
+                        'term' => 'Term',
+                    ),
+                ),
+            ),
+        ),
+        // Year
+        array(
+            'field_name' => 'field_year',
+            'type' => 'datetime',
+            'module' => 'date',
+            'cardinality' => 1,
+            'settings' => array(
+                'granularity' => array(
+                    'year' => 'year',
+                ),
+            ),
+        ),
+        // Exam
+        array(
+            'field_name' => 'field_exam',
+            'type' => 'file',
+            'module' => 'file',
+            'cardinality' => -1,
+            'settings' => array(
+                'uri_scheme' => 'private',
+            ),
+        ),
+        // Feedback
+        array(
+            'field_name' => 'field_feedback',
+            'type' => 'file',
+            'module' => 'file',
+            'cardinality' => -1,
+            'settings' => array(
+                'uri_scheme' => 'private',
+            ),
+        ),
+        // Best Exam
+        array(
+            'field_name' => 'field_best_exam',
+            'type' => 'file',
+            'module' => 'file',
+            'cardinality' => -1,
+            'settings' => array(
+                'uri_scheme' => 'private',
+            ),
+        ),
+    );
+    // Create the custom fields
+    foreach ($fields as $field) {
+        $field = field_create_field($field);
+    }
+    // Custom field instances
+    $instances = array(
+        // Exam Course
+        array(
+            'field_name' => 'field_course',
+            'entity_type' => 'node',
+            'bundle' => 'exam',
+            'label' => 'Course',
+            'required' => TRUE,
+            'widget' => array(
+                'type' => 'entityreference_autocomplete',
+            ),
+            'display' => array(
+                'default' => array(
+                    'label' => 'inline',
+                ),
+            ),
+        ),
+        // Exam Faculty
+        array(
+            'field_name' => 'field_faculty',
+            'entity_type' => 'node',
+            'bundle' => 'exam',
+            'label' => 'Faculty',
+            'required' => TRUE,
+            'widget' => array(
+                'type' => 'entityreference_autocomplete',
+            ),
+            'display' => array(
+                'default' => array(
+                    'label' => 'inline',
+                ),
+            ),
+        ),
+        // Exam Term
+        array(
+            'field_name' => 'field_term',
+            'entity_type' => 'node',
+            'bundle' => 'exam',
+            'label' => 'Term',
+            'required' => TRUE,
+            'widget' => array(
+                'type' => 'options_select',
+            ),
+            'display' => array(
+                'default' => array(
+                    'label' => 'inline',
+                ),
+            ),
+        ),
+        // Exam Year
+        array(
+            'field_name' => 'field_year',
+            'entity_type' => 'node',
+            'bundle' => 'exam',
+            'label' => 'Year',
+            'required' => TRUE,
+            'widget' => array(
+                'type' => 'date_select',
+                'settings' => array(
+                    'input_format' => 'Y M j - g:i:sa',
+                    'year_range' => '1984:+1',
+                ),
+            ),
+            'display' => array(
+                'default' => array(
+                    'label' => 'inline',
+                ),
+            ),
+        ),
+        // Exam Exam (file)
+        array(
+            'field_name' => 'field_exam',
+            'entity_type' => 'node',
+            'bundle' => 'exam',
+            'label' => 'Exam',
+            'widget' => array(
+                'type' => 'file_generic',
+            ),
+            'settings' => array(
+                'file_extensions' => 'txt doc docx pdf rtf',
+                'description_field' => 1,
+            ),
+        ),
+        // Exam Feedback (file)
+        array(
+            'field_name' => 'field_feedback',
+            'entity_type' => 'node',
+            'bundle' => 'exam',
+            'label' => 'Feedback',
+            'widget' => array(
+                'type' => 'file_generic',
+            ),
+            'settings' => array(
+                'file_extensions' => 'txt doc docx pdf rtf',
+                'description_field' => 1,
+            ),
+        ),
+        // Exam Best Exam (file)
+        array(
+            'field_name' => 'field_best_exam',
+            'entity_type' => 'node',
+            'bundle' => 'exam',
+            'label' => 'Best Exam',
+            'widget' => array(
+                'type' => 'file_generic',
+            ),
+            'settings' => array(
+                'file_extensions' => 'txt doc docx pdf rtf',
+                'description_field' => 1,
+            ),
+        ),
+    );
+    // Create the custom field instances
+    foreach ($instances as $instance) {
+        field_create_instance($instance);
+    }
+}
